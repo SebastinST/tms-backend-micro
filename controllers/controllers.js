@@ -21,8 +21,7 @@ exports.CreateTask = async (req, res) => {
    */
   if (!username || !password || !Task_name || !Task_app_Acronym) {
     return res.json({
-      code: "PS001",
-      message: "Missing mandatory fields"
+      code: "PS001"
     })
   }
   /*
@@ -32,8 +31,7 @@ exports.CreateTask = async (req, res) => {
    */
   if (typeof username !== "string" || typeof password !== "string" || typeof Task_name !== "string" || typeof Task_app_Acronym !== "string") {
     return res.json({
-      code: "PS002",
-      message: "Invalid data types"
+      code: "PS002"
     })
   }
   /*
@@ -44,8 +42,7 @@ exports.CreateTask = async (req, res) => {
   const user = await validateUser(username, password, connection)
   if (!user) {
     return res.json({
-      code: "IM001",
-      message: "Invalid user credentials"
+      code: "IM001"
     })
   }
   /*
@@ -55,8 +52,7 @@ exports.CreateTask = async (req, res) => {
    */
   if (user.is_disabled === 1) {
     return res.json({
-      code: "IM002",
-      message: "Inactive user account"
+      code: "IM002"
     })
   }
   /*
@@ -67,8 +63,7 @@ exports.CreateTask = async (req, res) => {
   const [row1, fields1] = await connection.promise().query("SELECT * FROM application WHERE app_acronym = ?", [Task_app_Acronym])
   if (row1.length === 0) {
     return res.json({
-      code: "AM001",
-      message: "Application does not exist"
+      code: "AM001"
     })
   }
   /*
@@ -79,8 +74,7 @@ exports.CreateTask = async (req, res) => {
   const permit = row1[0].App_permit_create
   if (permit === null || permit === undefined) {
     return res.json({
-      code: "AM002",
-      message: "User is not permitted"
+      code: "AM002"
     })
   }
   const user_groups = user.group_list.split(",")
@@ -90,8 +84,7 @@ exports.CreateTask = async (req, res) => {
   //Since permit can only have one group, we just need to check if the user's groups contains the permit
   if (!authorised) {
     return res.json({
-      code: "AM002",
-      message: "User is not permitted"
+      code: "AM002"
     })
   }
   //We need to handle the optional parameters, if they are not provided, we will set them to null
@@ -115,8 +108,7 @@ exports.CreateTask = async (req, res) => {
   const result = await connection.promise().execute("INSERT INTO task (Task_name, Task_description, Task_notes, Task_id, Task_plan, Task_app_acronym, Task_state, Task_creator, Task_owner, Task_createDate) VALUES (?,?,?,?,?,?,?,?,?,?)", [Task_name, Task_description, Task_notes, Task_id, null, Task_app_Acronym, Task_state, Task_creator, Task_owner, Task_createDate])
   if (result[0].affectedRows === 0) {
     return res.json({
-      code: "T002",
-      message: "Internal server error"
+      code: "T003"
     })
   }
 
@@ -125,13 +117,12 @@ exports.CreateTask = async (req, res) => {
   const result2 = await connection.promise().execute("UPDATE application SET App_Rnumber = ? WHERE App_Acronym = ?", [newApp_Rnumber, Task_app_Acronym])
   if (result2[0].affectedRows === 0) {
     return res.json({
-      code: "T002",
-      message: "Internal server error"
+      code: "T003"
     })
   }
   return res.json({
     code: "S001",
-    message: "Task created successfully"
+    Task_id: Task_id
   })
 }
 
@@ -144,8 +135,7 @@ exports.getTaskbyState = async (req, res) => {
    */
   if (!username || !password || !Task_state || !Task_app_Acronym) {
     return res.json({
-      code: "PS001",
-      message: "Missing mandatory fields"
+      code: "PS001"
     })
   }
   /*
@@ -155,8 +145,7 @@ exports.getTaskbyState = async (req, res) => {
    */
   if (typeof username !== "string" || typeof password !== "string" || typeof Task_state !== "string" || typeof Task_app_Acronym !== "string") {
     return res.json({
-      code: "PS002",
-      message: "Invalid data types"
+      code: "PS002"
     })
   }
   /*
@@ -167,8 +156,7 @@ exports.getTaskbyState = async (req, res) => {
   const user = await validateUser(username, password, connection)
   if (!user) {
     return res.json({
-      code: "IM001",
-      message: "Invalid user credentials"
+      code: "IM001"
     })
   }
   /*
@@ -178,8 +166,7 @@ exports.getTaskbyState = async (req, res) => {
    */
   if (user.is_disabled === 1) {
     return res.json({
-      code: "IM002",
-      message: "Invalid user credentials"
+      code: "IM002"
     })
   }
   /*
@@ -190,8 +177,7 @@ exports.getTaskbyState = async (req, res) => {
   const [row1, fields1] = await connection.promise().query("SELECT * FROM application WHERE app_acronym = ?", [Task_app_Acronym])
   if (row1.length === 0) {
     return res.json({
-      code: "AM001",
-      message: "Application does not exist"
+      code: "AM001"
     })
   }
 
@@ -202,36 +188,32 @@ exports.getTaskbyState = async (req, res) => {
    */
   if (Task_state !== "Open" && Task_state !== "ToDo" && Task_state !== "Doing" && Task_state !== "Done" && Task_state !== "Close") {
     return res.json({
-      code: "T001",
-      message: "Invalid task state"
+      code: "T002"
     })
   }
 
   const [row2, fields2] = await connection.promise().query("SELECT * FROM task WHERE Task_state = ? AND Task_app_acronym = ?", [Task_state, Task_app_Acronym])
   if (row2.length === 0) {
     return res.json({
-      code: "T002",
-      message: "Internal server error"
+      code: "T003"
     })
   }
   return res.json({
     code: "S001",
-    message: "Task fetched successfully",
     data: row2
   })
 }
 
 exports.PromoteTask2Done = async (req, res) => {
-  const { username, password, Task_id } = req.body
+  const { username, password, Task_id, Task_app_Acronym } = req.body
   /*
    * We are checking if the mandatory fields (username, password, Task_id) are present in the request parameters
    * If they are not present, we will send an error response
    * The error code PS001 is for missing parameters
    */
-  if (!username || !password || !Task_id) {
+  if (!username || !password || !Task_id || !Task_app_Acronym) {
     return res.json({
-      code: "PS001",
-      message: "Missing mandatory fields"
+      code: "PS001"
     })
   }
   /*
@@ -239,10 +221,9 @@ exports.PromoteTask2Done = async (req, res) => {
    * If they are not valid, we will send an error response
    * The error code PS002 is for invalid field data types
    */
-  if (typeof username !== "string" || typeof password !== "string" || typeof Task_id !== "string") {
+  if (typeof username !== "string" || typeof password !== "string" || typeof Task_id !== "string" || typeof Task_app_Acronym !== "string") {
     return res.json({
-      code: "PS002",
-      message: "Invalid data types"
+      code: "PS002"
     })
   }
   /*
@@ -253,8 +234,7 @@ exports.PromoteTask2Done = async (req, res) => {
   const user = await validateUser(username, password, connection)
   if (!user) {
     return res.json({
-      code: "IM001",
-      message: "Invalid user credentials"
+      code: "IM001"
     })
   }
   /*
@@ -264,8 +244,7 @@ exports.PromoteTask2Done = async (req, res) => {
    */
   if (user.is_disabled === 1) {
     return res.json({
-      code: "IM002",
-      message: "Invalid user credentials"
+      code: "IM002"
     })
   }
   /*
@@ -273,29 +252,20 @@ exports.PromoteTask2Done = async (req, res) => {
    * If it does not exist, we will send an error response
    * The error code TM001 is for task does not exist
    */
-  const [row1, fields1] = await connection.promise().query("SELECT * FROM task WHERE Task_id = ?", [Task_id])
-  if (row1.length === 0) {
-    return res.json({
-      code: "AM001",
-      message: "Task does not exist"
-    })
-  }
-  console.log(row1[0].Task_app_Acronym)
-  const [row2, fields2] = await connection.promise().query("SELECT * FROM application WHERE app_acronym = ?", [row1[0].Task_app_Acronym])
+
+  const [row2, fields2] = await connection.promise().query("SELECT * FROM application WHERE app_acronym = ?", [Task_app_Acronym])
   if (row2.length === 0) {
     return res.json({
-      code: "AM002",
-      message: "Application does not exist"
+      code: "AM001"
     })
   }
-  const Task_state = row1[0].Task_state
+
   const nextState = "Done"
   const havePermit = row2[0].App_permit_Doing
 
   if (havePermit === null || havePermit === undefined) {
     return res.json({
-      code: "AM003",
-      message: "User is not permitted"
+      code: "AM002"
     })
   }
   const user_groups = user.group_list.split(",")
@@ -305,14 +275,21 @@ exports.PromoteTask2Done = async (req, res) => {
   //Since permit can only have one group, we just need to check if the user's groups contains the permit
   if (!authorised) {
     return res.json({
-      code: "AM003",
-      message: "User is not permitted"
+      code: "AM002"
     })
   }
+
+  const [row1, fields1] = await connection.promise().query("SELECT * FROM task WHERE Task_id = ?", [Task_id])
+  if (row1.length === 0) {
+    return res.json({
+      code: "T001"
+    })
+  }
+  const Task_state = row1[0].Task_state
+
   if (Task_state !== "Doing") {
     return res.json({
-      code: "T001",
-      message: "Invalid task state"
+      code: "T002"
     })
   }
 
@@ -334,14 +311,12 @@ exports.PromoteTask2Done = async (req, res) => {
   const result = await connection.promise().execute("UPDATE task SET Task_notes = ?, Task_state = ?, Task_owner = ? WHERE Task_id = ?", [Task_notes, nextState, Task_owner, Task_id])
   if (result[0].affectedRows === 0) {
     return res.json({
-      code: "T002",
-      message: "Internal server error"
+      code: "T003"
     })
   }
 
   return res.json({
-    code: "S001",
-    message: "Task promoted successfully"
+    code: "S001"
   })
 }
 

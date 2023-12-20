@@ -23,10 +23,8 @@ const routes = require("./routes/routes.js")
 app.use("/controller", routes)
 
 app.all("*", (req, res, next) => {
-  // Send a standard HTTP status code. For example, 404 for 'Not Found'.
   res.json({
-    code: "AS001", // Custom error code added in the response body
-    message: "Endpoint does not exist"
+    code: "AS001"
   })
 })
 
