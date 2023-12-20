@@ -1,43 +1,44 @@
-const express = require("express")
-const cors = require("cors")
-const app = express()
+const express = require('express');
+const dotenv = require("dotenv");
+const cors = require("cors");
 
-app.use(cors())
+// Setting up config.env file variable
+dotenv.config({ path: "./config/config.env" });
 
-const dotenv = require("dotenv")
+// Setting up database connection
+const connection = require("./config/database");
 
-//Setting up config.env file variable
-dotenv.config({ path: "./config/config.env" })
+// Inititalize the app and add middleware
+const app = express();
+app.use(express.json());
+app.use(cors());
 
-//Handle uncaught exceptions
-process.on("uncaughtException", err => {
-  console.log(`Error: ${err.message}`)
-  console.log("Shutting down server due to uncaught exception")
-  process.exit(1)
-})
+// Importing routes
+const router = require("./router")
 
-app.use(express.json())
+// Mounting routes
+app.use("/", router)
 
-const routes = require("./routes/routes.js")
-
-app.use("/controller", routes)
-
-app.all("*", (req, res, next) => {
-  res.json({
-    code: "AS001"
-  })
-})
-
-const PORT = process.env.PORT
-const server = app.listen(PORT, () => {
-  console.log(`Server started on port ${PORT} in ${process.env.NODE_ENV} mode`)
-})
-
-//Handle unhandled promise rejections
-process.on("unhandledRejection", err => {
-  console.log(`ERROR: ${err.stack}`)
+// Handle unhandled promise rejections
+process.on("unhandledRejection", e => {
+  console.log(`ERROR: ${e.stack}`)
   console.log("Shutting down the server due to unhandled promise rejection")
   server.close(() => {
     process.exit(1)
   })
+})
+
+// AS001: Check that endpoint exist
+app.all("*", (req, res, next) => {
+  res.json({
+    code: "AS001"
+  });
+  return;
+})
+
+
+// App listening on port
+const PORT = process.env.PORT
+const server = app.listen(PORT, () => {
+  console.log(`TMS-Backend-Micro started on port ${PORT} in ${process.env.NODE_ENV} mode`)
 })
