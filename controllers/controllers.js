@@ -41,29 +41,10 @@ exports.CreateTask = async (req, res) => {
    * If they are not correct, we will send an error response
    * The error code IM001 is for incorrect username or password
    */
-  const [row, fields] = await connection.promise().query("SELECT * FROM user WHERE username = ?", [username])
-  if (row.length === 0) {
+  const user = await validateUser(username, password, connection)
+  if (!user) {
     return res.json({
       code: "IM001",
-      message: "Incorrect username or password"
-    })
-  }
-  //we need to hash the password and compare it with the hashed password in the database
-  const isPasswordMatched = await bcrypt.compare(password, row[0].password)
-  if (!isPasswordMatched) {
-    return res.json({
-      code: "IM001",
-      message: "Incorrect username or password"
-    })
-  }
-  /*
-   * We are checking if the user account is active
-   * If it is not active, we will send an error response
-   * The error code IM002 is for inactive user account
-   */
-  if (row[0].is_disabled === 1) {
-    return res.json({
-      code: "IM002",
       message: "Incorrect username or password"
     })
   }
@@ -91,7 +72,7 @@ exports.CreateTask = async (req, res) => {
       message: "User does not have access to the application"
     })
   }
-  const user_groups = row[0].group_list.split(",")
+  const user_groups = user.group_list.split(",")
   //Check if any of the user's groups is included in the permit array, then the user is authorized. The group has to match exactly
   //for each group in the group array, check match exact as group parameter
   const authorised = user_groups.includes(permit)
@@ -106,16 +87,16 @@ exports.CreateTask = async (req, res) => {
   if (!Task_description) {
     Task_description = null
   }
-  const Task_notes = "Task created by " + row[0].username + " on " + new Date().toISOString().slice(0, 10)
+  const Task_notes = "Task created by " + user.username + " on " + new Date().toISOString().slice(0, 10)
   const Task_id = Task_app_Acronym + row1[0].App_Rnumber
   //Generate Task_state
   const Task_state = "Open"
 
   //Generate Task_creator
-  const Task_creator = row[0].username
+  const Task_creator = user.username
 
   //Generate Task_owner
-  const Task_owner = row[0].username
+  const Task_owner = user.username
   //Generate Task_createDate, the date is in the format YYYY-MM-DD HH:MM:SS. This is using current local time
   const Task_createDate = new Date().toISOString().slice(0, 19).replace("T", " ")
 
@@ -141,4 +122,26 @@ exports.CreateTask = async (req, res) => {
     code: "S001",
     message: "lets go to the gym buddy"
   })
+}
+
+const validateUser = async (username, password, connection) => {
+  const [row, fields] = await connection.promise().query("SELECT * FROM user WHERE username = ?", [username])
+  if (row.length === 0) {
+    return
+  }
+  //we need to hash the password and compare it with the hashed password in the database
+  const isPasswordMatched = await bcrypt.compare(password, row[0].password)
+  if (!isPasswordMatched) {
+    return
+  }
+  /*
+   * We are checking if the user account is active
+   * If it is not active, we will send an error response
+   * The error code IM002 is for inactive user account
+   */
+  if (row[0].is_disabled === 1) {
+    return
+  }
+
+  return row[0]
 }
