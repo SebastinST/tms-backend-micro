@@ -7,7 +7,7 @@ exports.catchSpecialCharacters = (req, res, next) => {
   if (regex.test(req.url.slice(1))) {
     return res.json({
       code: "PS002",
-      message: "Special characters not allowed"
+      message: "Endpoint has special characters"
     })
   }
   next()

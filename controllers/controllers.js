@@ -22,7 +22,7 @@ exports.CreateTask = async (req, res) => {
   if (!username || !password || !Task_name || !Task_app_Acronym) {
     return res.json({
       code: "PS001",
-      message: "Missing parameters"
+      message: "Missing mandatory fields"
     })
   }
   /*
@@ -33,7 +33,7 @@ exports.CreateTask = async (req, res) => {
   if (typeof username !== "string" || typeof password !== "string" || typeof Task_name !== "string" || typeof Task_app_Acronym !== "string") {
     return res.json({
       code: "PS002",
-      message: "Invalid field data types"
+      message: "Invalid data types"
     })
   }
   /*
@@ -45,7 +45,18 @@ exports.CreateTask = async (req, res) => {
   if (!user) {
     return res.json({
       code: "IM001",
-      message: "Incorrect username or password"
+      message: "Invalid user credentials"
+    })
+  }
+  /*
+   * We are checking if the user account is active
+   * If it is not active, we will send an error response
+   * The error code IM002 is for inactive user account
+   */
+  if (user.is_disabled === 1) {
+    return res.json({
+      code: "IM002",
+      message: "Inactive user account"
     })
   }
   /*
@@ -69,7 +80,7 @@ exports.CreateTask = async (req, res) => {
   if (permit === null || permit === undefined) {
     return res.json({
       code: "AM002",
-      message: "User does not have access to the application"
+      message: "User is not permitted"
     })
   }
   const user_groups = user.group_list.split(",")
@@ -80,7 +91,7 @@ exports.CreateTask = async (req, res) => {
   if (!authorised) {
     return res.json({
       code: "AM002",
-      message: "User does not have access to the application"
+      message: "User is not permitted"
     })
   }
   //We need to handle the optional parameters, if they are not provided, we will set them to null
@@ -105,7 +116,7 @@ exports.CreateTask = async (req, res) => {
   if (result[0].affectedRows === 0) {
     return res.json({
       code: "T002",
-      message: "Something went wrong..."
+      message: "Internal server error"
     })
   }
 
@@ -115,12 +126,12 @@ exports.CreateTask = async (req, res) => {
   if (result2[0].affectedRows === 0) {
     return res.json({
       code: "T002",
-      message: "Something went wrong..."
+      message: "Internal server error"
     })
   }
   return res.json({
     code: "S001",
-    message: "lets go to the gym buddy"
+    message: "Task created successfully"
   })
 }
 
@@ -132,14 +143,6 @@ const validateUser = async (username, password, connection) => {
   //we need to hash the password and compare it with the hashed password in the database
   const isPasswordMatched = await bcrypt.compare(password, row[0].password)
   if (!isPasswordMatched) {
-    return
-  }
-  /*
-   * We are checking if the user account is active
-   * If it is not active, we will send an error response
-   * The error code IM002 is for inactive user account
-   */
-  if (row[0].is_disabled === 1) {
     return
   }
 
