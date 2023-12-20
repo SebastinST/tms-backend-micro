@@ -3,7 +3,6 @@ const cors = require("cors")
 const app = express()
 
 app.use(cors())
-const mysql = require("mysql2")
 
 const dotenv = require("dotenv")
 
@@ -19,14 +18,15 @@ process.on("uncaughtException", err => {
 
 app.use(express.json())
 
-app.get("/", (req, res) => {
-  res.send("Hello World!")
-})
+const routes = require("./routes/routes.js")
+
+app.use("/controller", routes)
 
 app.all("*", (req, res, next) => {
-  res.status(404).json({
-    success: false,
-    message: `Can't find ${req.originalUrl} on this server!`
+  // Send a standard HTTP status code. For example, 404 for 'Not Found'.
+  res.json({
+    code: "AS001", // Custom error code added in the response body
+    message: "Endpoint does not exist"
   })
 })
 
