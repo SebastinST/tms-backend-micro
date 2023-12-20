@@ -135,6 +135,216 @@ exports.CreateTask = async (req, res) => {
   })
 }
 
+exports.getTaskbyState = async (req, res) => {
+  const { username, password, Task_state, Task_app_Acronym, Task_notes } = req.body
+  /*
+   * We are checking if the mandatory fields (username, password, Task_state, Task_app_Acronym) are present in the request parameters
+   * If they are not present, we will send an error response
+   * The error code PS001 is for missing parameters
+   */
+  if (!username || !password || !Task_state || !Task_app_Acronym) {
+    return res.json({
+      code: "PS001",
+      message: "Missing mandatory fields"
+    })
+  }
+  /*
+   * We are checking if they are valid data types
+   * If they are not valid, we will send an error response
+   * The error code PS002 is for invalid field data types
+   */
+  if (typeof username !== "string" || typeof password !== "string" || typeof Task_state !== "string" || typeof Task_app_Acronym !== "string") {
+    return res.json({
+      code: "PS002",
+      message: "Invalid data types"
+    })
+  }
+  /*
+   * We are checking if the username and password are correct
+   * If they are not correct, we will send an error response
+   * The error code IM001 is for incorrect username or password
+   */
+  const user = await validateUser(username, password, connection)
+  if (!user) {
+    return res.json({
+      code: "IM001",
+      message: "Invalid user credentials"
+    })
+  }
+  /*
+   * We are checking if the user account is active
+   * If it is not active, we will send an error response
+   * The error code IM002 is for inactive user account
+   */
+  if (user.is_disabled === 1) {
+    return res.json({
+      code: "IM002",
+      message: "Invalid user credentials"
+    })
+  }
+  /*
+   * We are checking if the application exists
+   * If it does not exist, we will send an error response
+   * The error code AM001 is for application does not exist
+   */
+  const [row1, fields1] = await connection.promise().query("SELECT * FROM application WHERE app_acronym = ?", [Task_app_Acronym])
+  if (row1.length === 0) {
+    return res.json({
+      code: "AM001",
+      message: "Application does not exist"
+    })
+  }
+
+  /*
+   * We are checking if the task state is valid or no.
+   * If it is not valid, we will send an error response. Valid task states are Open, ToDo, Doing, Done, Close
+   * The error code TS001 is for invalid task state
+   */
+  if (Task_state !== "Open" && Task_state !== "ToDo" && Task_state !== "Doing" && Task_state !== "Done" && Task_state !== "Close") {
+    return res.json({
+      code: "T001",
+      message: "Invalid task state"
+    })
+  }
+
+  const [row2, fields2] = await connection.promise().query("SELECT * FROM task WHERE Task_state = ? AND Task_app_acronym = ?", [Task_state, Task_app_Acronym])
+  if (row2.length === 0) {
+    return res.json({
+      code: "T002",
+      message: "Internal server error"
+    })
+  }
+  return res.json({
+    code: "S001",
+    message: "Task fetched successfully",
+    data: row2
+  })
+}
+
+exports.PromoteTask2Done = async (req, res) => {
+  const { username, password, Task_id } = req.body
+  /*
+   * We are checking if the mandatory fields (username, password, Task_id) are present in the request parameters
+   * If they are not present, we will send an error response
+   * The error code PS001 is for missing parameters
+   */
+  if (!username || !password || !Task_id) {
+    return res.json({
+      code: "PS001",
+      message: "Missing mandatory fields"
+    })
+  }
+  /*
+   * We are checking if they are valid data types
+   * If they are not valid, we will send an error response
+   * The error code PS002 is for invalid field data types
+   */
+  if (typeof username !== "string" || typeof password !== "string" || typeof Task_id !== "string") {
+    return res.json({
+      code: "PS002",
+      message: "Invalid data types"
+    })
+  }
+  /*
+   * We are checking if the username and password are correct
+   * If they are not correct, we will send an error response
+   * The error code IM001 is for incorrect username or password
+   */
+  const user = await validateUser(username, password, connection)
+  if (!user) {
+    return res.json({
+      code: "IM001",
+      message: "Invalid user credentials"
+    })
+  }
+  /*
+   * We are checking if the user account is active
+   * If it is not active, we will send an error response
+   * The error code IM002 is for inactive user account
+   */
+  if (user.is_disabled === 1) {
+    return res.json({
+      code: "IM002",
+      message: "Invalid user credentials"
+    })
+  }
+  /*
+   * We are checking if the application and task exists
+   * If it does not exist, we will send an error response
+   * The error code TM001 is for task does not exist
+   */
+  const [row1, fields1] = await connection.promise().query("SELECT * FROM task WHERE Task_id = ?", [Task_id])
+  if (row1.length === 0) {
+    return res.json({
+      code: "AM001",
+      message: "Task does not exist"
+    })
+  }
+  console.log(row1[0].Task_app_Acronym)
+  const [row2, fields2] = await connection.promise().query("SELECT * FROM application WHERE app_acronym = ?", [row1[0].Task_app_Acronym])
+  if (row2.length === 0) {
+    return res.json({
+      code: "AM002",
+      message: "Application does not exist"
+    })
+  }
+  const Task_state = row1[0].Task_state
+  const nextState = "Done"
+  const havePermit = row2[0].App_permit_Doing
+
+  if (havePermit === null || havePermit === undefined) {
+    return res.json({
+      code: "AM003",
+      message: "User is not permitted"
+    })
+  }
+  const user_groups = user.group_list.split(",")
+  //Check if any of the user's groups is included in the permit array, then the user is authorized. The group has to match exactly
+  //for each group in the group array, check match exact as group parameter
+  const authorised = user_groups.includes(havePermit)
+  //Since permit can only have one group, we just need to check if the user's groups contains the permit
+  if (!authorised) {
+    return res.json({
+      code: "AM003",
+      message: "User is not permitted"
+    })
+  }
+  if (Task_state !== "Doing") {
+    return res.json({
+      code: "T001",
+      message: "Invalid task state"
+    })
+  }
+
+  //Get the Task_owner from the req.user.username
+  const Task_owner = user.username
+
+  let Added_Task_notes
+  if (req.body.Task_notes === undefined || req.body.Task_notes === null || req.body.Task_notes === "") {
+    //append {Task_owner} moved {Task_name} from {Task_state} to {nextState} to the end of Task_note
+    Added_Task_notes = Task_owner + " moved " + row1[0].Task_name + " from " + Task_state + " to " + nextState + " on " + new Date().toISOString().slice(0, 19).replace("T", " ")
+  } else {
+    //Get the Task_notes from the req.body.Task_notes and append {Task_owner} moved {Task_name} from {Task_state} to {nextState} to the end of Task_note
+    Added_Task_notes = Task_owner + " moved " + row1[0].Task_name + " from " + Task_state + " to " + nextState + " on " + new Date().toISOString().slice(0, 19).replace("T", " ") + "\n" + req.body.Task_notes
+  }
+
+  //Append Task_notes to the preexisting Task_notes, I want it to have two new lines between the old notes and the new notes
+  const Task_notes = Added_Task_notes + "\n\n" + row1[0].Task_notes
+  //Update the task
+  const result = await connection.promise().execute("UPDATE task SET Task_notes = ?, Task_state = ?, Task_owner = ? WHERE Task_id = ?", [Task_notes, nextState, Task_owner, Task_id])
+  if (result[0].affectedRows === 0) {
+    return res.json({
+      code: "T002",
+      message: "Internal server error"
+    })
+  }
+
+  return res.json({
+    code: "S001",
+    message: "Task promoted successfully"
+  })
+}
+
 const validateUser = async (username, password, connection) => {
   const [row, fields] = await connection.promise().query("SELECT * FROM user WHERE username = ?", [username])
   if (row.length === 0) {
