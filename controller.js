@@ -1,5 +1,6 @@
 const { validateUser, Checkgroup } = require("./middleware.js");
 const connection = require("./config/database");
+const bcrypt = require("bcryptjs");
 
 exports.CreateTask = async (req, res) => {
   const { username, password, Task_name, Task_app_Acronym } = req.body;
@@ -126,82 +127,106 @@ exports.CreateTask = async (req, res) => {
 
 /* --------------------------------------------------------------------------- */
 
-exports.getTaskbyState = async (req, res) => {
-  const { username, password, Task_state, Task_app_Acronym, Task_notes } = req.body
-  /*
-   * We are checking if the mandatory fields (username, password, Task_state, Task_app_Acronym) are present in the request parameters
-   * If they are not present, we will send an error response
-   * The error code PS001 is for missing parameters
-   */
-  if (!username || !password || !Task_state || !Task_app_Acronym) {
-    return res.json({
-      code: "PS001"
-    })
-  }
-  /*
-   * We are checking if they are valid data types
-   * If they are not valid, we will send an error response
-   * The error code PS002 is for invalid field data types
-   */
-  if (typeof username !== "string" || typeof password !== "string" || typeof Task_state !== "string" || typeof Task_app_Acronym !== "string") {
-    return res.json({
-      code: "PS002"
-    })
-  }
-  /*
-   * We are checking if the username and password are correct
-   * If they are not correct, we will send an error response
-   * The error code IM001 is for incorrect username or password
-   */
-  const user = await validateUser(username, password, connection)
-  if (!user) {
-    return res.json({
-      code: "IM001"
-    })
-  }
-  /*
-   * We are checking if the user account is active
-   * If it is not active, we will send an error response
-   * The error code IM002 is for inactive user account
-   */
-  if (user.is_disabled === 1) {
-    return res.json({
-      code: "IM002"
-    })
-  }
-  /*
-   * We are checking if the application exists
-   * If it does not exist, we will send an error response
-   * The error code AM001 is for application does not exist
-   */
-  const [row1, fields1] = await connection.promise().query("SELECT * FROM application WHERE app_acronym = ?", [Task_app_Acronym])
-  if (row1.length === 0) {
-    return res.json({
-      code: "AM001"
-    })
-  }
+exports.GetTaskbyState = async (req, res) => {
+  try {
+    const { username, password, Task_state, Task_app_Acronym } = req.body
+    
+    // PS001: Check for mandatory fields in request body
+    if (username === undefined
+      || password === undefined
+      || Task_state === undefined
+      || Task_app_Acronym === undefined
+    ) {
+      res.json({
+        code: "PS001"
+      });
+      return;
+    }
 
-  /*
-   * We are checking if the task state is valid or no.
-   * If it is not valid, we will send an error response. Valid task states are Open, ToDo, Doing, Done, Close
-   * The error code TS001 is for invalid task state
-   */
-  if (Task_state !== "Open" && Task_state !== "ToDo" && Task_state !== "Doing" && Task_state !== "Done" && Task_state !== "Close") {
-    return res.json({
-      code: "T002"
-    })
-  }
+    // PS002: Check for valid data types for mandatory fields
+    if (typeof username !== "string" 
+      || typeof password !== "string" 
+      || typeof Task_state !== "string" 
+      || typeof Task_app_Acronym !== "string"
+    ) {
+      res.json({
+        code: "PS002"
+      });
+      return;
+    }
 
-  const [row2, fields2] = await connection.promise().query("SELECT * FROM task WHERE Task_state = ? AND Task_app_acronym = ?", [Task_state, Task_app_Acronym])
-  if (row2.length === 0) {
-    return res.json({
+    // Get user details
+    const getUser = await connection.promise().query(
+      "SELECT * FROM user WHERE username = ?", 
+      [username]
+    );
+    const user = getUser[0][0];
+    
+    // IM001: Check for valid user credentials
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+      res.json({
+        code: "IM001"
+      });
+      return;
+    }
+
+    // IM002: Check for active user account
+    if (user.is_disabled === 1) {
+      res.json({
+        code: "IM002"
+      });
+      return;
+    }
+
+    // Get app details
+    let getApp = await connection.promise().query(
+      "SELECT * FROM application WHERE app_acronym = ?", 
+      [Task_app_Acronym]
+    )
+    const app = getApp[0][0];
+
+    // AM001: Check if application exist in DB
+    if (!app) {
+      res.json({
+        code: "AM001"
+      });
+      return;
+    }
+
+    // TS001: Check for valid task state
+    if (Task_state !== "Open" 
+      && Task_state !== "ToDo" 
+      && Task_state !== "Doing" 
+      && Task_state !== "Done" 
+      && Task_state !== "Close"
+    ) {
+      res.json({
+        code: "T002"
+      });
+      return;
+    }
+
+    // Get tasks details
+    const getTasks = await connection.promise().query(
+      "SELECT * FROM task WHERE Task_state = ? AND Task_app_acronym = ?", 
+      [Task_state, Task_app_Acronym]
+    )
+    const tasks = getTasks[0];
+    
+    // S001: Return tasks
+    res.json({
+      code: "S001",
+      data: tasks
+    });
+    return;
+
+  } catch(e) {
+    // S003: Check for any transaction error
+    res.json({
       code: "T003"
-    })
+    });
+    return;
   }
-  return res.json({
-    code: "S001",
-    data: row2
-  })
 }
 
 /* --------------------------------------------------------------------------- */
