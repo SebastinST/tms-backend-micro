@@ -234,117 +234,138 @@ exports.GetTaskbyState = async (req, res) => {
 /* --------------------------------------------------------------------------- */
 
 exports.PromoteTask2Done = async (req, res) => {
-  const { username, password, Task_id, Task_app_Acronym } = req.body
-  /*
-   * We are checking if the mandatory fields (username, password, Task_id) are present in the request parameters
-   * If they are not present, we will send an error response
-   * The error code PS001 is for missing parameters
-   */
-  if (!username || !password || !Task_id || !Task_app_Acronym) {
-    return res.json({
-      code: "PS001"
-    })
-  }
-  /*
-   * We are checking if they are valid data types
-   * If they are not valid, we will send an error response
-   * The error code PS002 is for invalid field data types
-   */
-  if (typeof username !== "string" || typeof password !== "string" || typeof Task_id !== "string" || typeof Task_app_Acronym !== "string") {
-    return res.json({
-      code: "PS002"
-    })
-  }
-  /*
-   * We are checking if the username and password are correct
-   * If they are not correct, we will send an error response
-   * The error code IM001 is for incorrect username or password
-   */
-  const user = await validateUser(username, password, connection)
-  if (!user) {
-    return res.json({
-      code: "IM001"
-    })
-  }
-  /*
-   * We are checking if the user account is active
-   * If it is not active, we will send an error response
-   * The error code IM002 is for inactive user account
-   */
-  if (user.is_disabled === 1) {
-    return res.json({
-      code: "IM002"
-    })
-  }
-  /*
-   * We are checking if the application and task exists
-   * If it does not exist, we will send an error response
-   * The error code TM001 is for task does not exist
-   */
+  try {
+    const { username, password, Task_id, Task_app_Acronym } = req.body;
+    let { New_notes } = req.body;
 
-  const [row2, fields2] = await connection.promise().query("SELECT * FROM application WHERE app_acronym = ?", [Task_app_Acronym])
-  if (row2.length === 0) {
-    return res.json({
-      code: "AM001"
-    })
-  }
+    // PS001: Check for mandatory fields in request body
+    if (username === undefined
+      || password === undefined
+      || Task_id === undefined
+      || Task_app_Acronym === undefined
+    ) {
+      res.json({
+        code: "PS001"
+      });
+      return;
+    }
 
-  const nextState = "Done"
-  const havePermit = row2[0].App_permit_Doing
+    // PS002: Check for valid data types for mandatory fields
+    if (typeof username !== "string" 
+      || typeof password !== "string" 
+      || typeof Task_id !== "string" 
+      || typeof Task_app_Acronym !== "string"
+    ) {
+      return res.json({
+        code: "PS002"
+      })
+    }
+    
+    // Get user details from DB
+    const getUser = await connection.promise().query(
+      "SELECT * FROM user WHERE username = ?", 
+      [username]
+    );
+    const user = getUser[0][0];
+    
+    // IM001: Check for valid user credentials
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+      res.json({
+        code: "IM001"
+      });
+      return;
+    }
+    
+    // IM002: Check for active user account
+    if (user.is_disabled === 1) {
+      res.json({
+        code: "IM002"
+      });
+      return;
+    }
+    
+    // Get app details from DB
+    let getApp = await connection.promise().query(
+      "SELECT * FROM application WHERE app_acronym = ?", 
+      [Task_app_Acronym]
+    )
+    const app = getApp[0][0];
 
-  if (havePermit === null || havePermit === undefined) {
-    return res.json({
-      code: "AM002"
-    })
-  }
-  const user_groups = user.group_list.split(",")
-  //Check if any of the user's groups is included in the permit array, then the user is authorized. The group has to match exactly
-  //for each group in the group array, check match exact as group parameter
-  const authorised = user_groups.includes(havePermit)
-  //Since permit can only have one group, we just need to check if the user's groups contains the permit
-  if (!authorised) {
-    return res.json({
-      code: "AM002"
-    })
-  }
+    // AM001: Check for valid application
+    if (!app) {
+      res.json({
+        code: "AM001"
+      });
+      return;
+    }
 
-  const [row1, fields1] = await connection.promise().query("SELECT * FROM task WHERE Task_id = ?", [Task_id])
-  if (row1.length === 0) {
-    return res.json({
-      code: "T001"
-    })
-  }
-  const Task_state = row1[0].Task_state
+    // AM002: Check if user has permit to promote task
+    if (!app.App_permit_Doing 
+      || !(await Checkgroup(username, app.App_permit_Doing))
+    ) {
+      res.json({
+        code: "AM002"
+      });
+      return;
+    }
 
-  if (Task_state !== "Doing") {
-    return res.json({
-      code: "T002"
-    })
-  }
+    // Get task details from DB
+    let getTask = await connection.promise().query(
+      "SELECT * FROM task WHERE Task_id = ?", 
+      [Task_id]
+    )
+    const task = getTask[0][0];
 
-  //Get the Task_owner from the req.user.username
-  const Task_owner = user.username
+    // T001: Check for valid task
+    if (!task) {
+      res.json({
+        code: "T001"
+      });
+      return;
+    }
 
-  let Added_Task_notes
-  if (req.body.Task_notes === undefined || req.body.Task_notes === null || req.body.Task_notes === "") {
-    //append {Task_owner} moved {Task_name} from {Task_state} to {nextState} to the end of Task_note
-    Added_Task_notes = Task_owner + " moved " + row1[0].Task_name + " from " + Task_state + " to " + nextState + " on " + new Date().toISOString().slice(0, 19).replace("T", " ")
-  } else {
-    //Get the Task_notes from the req.body.Task_notes and append {Task_owner} moved {Task_name} from {Task_state} to {nextState} to the end of Task_note
-    Added_Task_notes = Task_owner + " moved " + row1[0].Task_name + " from " + Task_state + " to " + nextState + " on " + new Date().toISOString().slice(0, 19).replace("T", " ") + "\n" + req.body.Task_notes
-  }
+    // T002: Check that task is in "Doing" state
+    if (task.Task_state !== "Doing") {
+      res.json({
+        code: "T002"
+      });
+      return;
+    }
 
-  //Append Task_notes to the preexisting Task_notes, I want it to have two new lines between the old notes and the new notes
-  const Task_notes = Added_Task_notes + "\n\n" + row1[0].Task_notes
-  //Update the task
-  const result = await connection.promise().execute("UPDATE task SET Task_notes = ?, Task_state = ?, Task_owner = ? WHERE Task_id = ?", [Task_notes, nextState, Task_owner, Task_id])
-  if (result[0].affectedRows === 0) {
-    return res.json({
+    // Set generated task parameters
+    New_notes += 
+    `
+    \nPromoted to 'Done' state by User (${username}) at Datetime: ${new Date().toLocaleString()}
+    \n******************************************************************************************************************************************************************************
+    \n
+    `
+    + task.Task_notes;
+
+    // Update the task in DB
+    const result = await connection.promise().execute(
+      "UPDATE task SET `Task_notes`=?, `Task_state`=?, `Task_owner`=? WHERE `Task_id`=?", 
+      [New_notes, 'Done', username, Task_id]
+    )
+    
+    // T003: Check if task is updated in DB
+    if (result[0].affectedRows === 0) {
+      res.json({
+        code: "T003"
+      });
+      return;
+    }
+
+    // S001: Return successful update
+    res.json({
+      code: "S001"
+    });
+    return;
+
+  } catch(e) {
+    // S003: Check for any transaction error
+    res.json({
       code: "T003"
-    })
+    });
+    return;
   }
-
-  return res.json({
-    code: "S001"
-  })
 }
