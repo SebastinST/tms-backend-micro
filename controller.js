@@ -3,94 +3,96 @@ const connection = require("./config/database");
 const bcrypt = require("bcryptjs");
 
 exports.CreateTask = async (req, res) => {
-  const { username, password, Task_name, Task_app_Acronym } = req.body;
-  let { Task_description } = req.body;
-
-  // PS001: Check for mandatory fields in request body
-  if (username === undefined || username === null
-    || password === undefined || password === null
-    || Task_name === undefined || Task_name === null 
-    || Task_app_Acronym === undefined || Task_app_Acronym === null
-  ) {
-    res.json({
-      code: "PS001"
-    });
-    return;
-  }
-
-  // PS002: Check for valid data types for mandatory fields
-  if (typeof username !== "string" 
-    || typeof password !== "string" 
-    || typeof Task_name !== "string" 
-    || typeof Task_app_Acronym !== "string"
-  ) {
-    return res.json({
-      code: "PS002"
-    })
-  }
-  
-  // IM001: Check for valid user credentials
-  // Get user details
-  const user = await validateUser(username, password, connection)
-  if (!user) {
-    res.json({
-      code: "IM001"
-    });
-    return;
-  }
-  
-  // IM002: Check for active user account
-  if (user.is_disabled === 1) {
-    res.json({
-      code: "IM002"
-    });
-    return;
-  }
-  
-  // AM001: Check if application exist in DB
-  let result = await connection.promise().query("SELECT * FROM application WHERE app_acronym = ?", [Task_app_Acronym])
-  // Get app details
-  const app = result[0][0];
-  if (!app) {
-    res.json({
-      code: "AM001"
-    });
-    return;
-  }
-
-  // AM002: Check if user has permit to create task
-  const permit = app.App_permit_create
-  const authorised = await Checkgroup(username, permit);
-  if (permit === null 
-    || permit === undefined 
-    || !authorised
-  ) {
-    res.json({
-      code: "AM002"
-    });
-    return;
-  }
-
-  // Set optional parameters to null if not provided
-  if (!Task_description) { Task_description = null }
-  // Generate task ID
-  const Task_id = Task_app_Acronym + app.App_Rnumber;
-  // Set default open state
-  const Task_state = "Open";
-  // Set initial notes for task as audit
-  const Task_notes = 
-  `
-  \nCreated in 'Open' state by User (${username}) at Datetime: ${new Date().toLocaleString()}
-  \n******************************************************************************************************************************************************************************
-  \n
-  `
-  // Set task creator and owner as current username
-  const Task_creator = username;
-  const Task_owner = username;
-
-  // Try creating task in DB
   try {
-    result = await connection.promise().execute(
+    const { username, password, Task_name, Task_app_Acronym } = req.body;
+    let { Task_description } = req.body;
+
+    // PS001: Check for mandatory fields in request body
+    if (username === undefined
+      || password === undefined
+      || Task_name === undefined
+      || Task_app_Acronym === undefined
+    ) {
+      res.json({
+        code: "PS001"
+      });
+      return;
+    }
+
+    // PS002: Check for valid data types for mandatory fields
+    if (typeof username !== "string" 
+      || typeof password !== "string" 
+      || typeof Task_name !== "string" 
+      || typeof Task_app_Acronym !== "string"
+    ) {
+      return res.json({
+        code: "PS002"
+      })
+    }
+    
+    // Get user details from DB
+    const getUser = await connection.promise().query(
+      "SELECT * FROM user WHERE username = ?", 
+      [username]
+    );
+    const user = getUser[0][0];
+    
+    // IM001: Check for valid user credentials
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+      res.json({
+        code: "IM001"
+      });
+      return;
+    }
+    
+    // IM002: Check for active user account
+    if (user.is_disabled === 1) {
+      res.json({
+        code: "IM002"
+      });
+      return;
+    }
+    
+    // Get app details from DB
+    let getApp = await connection.promise().query(
+      "SELECT * FROM application WHERE app_acronym = ?", 
+      [Task_app_Acronym]
+    )
+    const app = getApp[0][0];
+
+    // AM001: Check for valid application
+    if (!app) {
+      res.json({
+        code: "AM001"
+      });
+      return;
+    }
+
+    // AM002: Check if user has permit to create task
+    if (!app.App_permit_create 
+      || !(await Checkgroup(username, app.App_permit_create))
+    ) {
+      res.json({
+        code: "AM002"
+      });
+      return;
+    }
+
+    // Set generated task parameters
+    if (!Task_description) { Task_description = null }
+    const Task_creator = username;
+    const Task_owner = username;
+    const Task_id = Task_app_Acronym + app.App_Rnumber;
+    const Task_state = "Open";
+    const Task_notes = 
+    `
+    \nCreated in 'Open' state by User (${username}) at Datetime: ${new Date().toLocaleString()}
+    \n******************************************************************************************************************************************************************************
+    \n
+    `
+
+    // Create task in DB
+    await connection.promise().execute(
       "INSERT INTO task (Task_name, Task_description, Task_notes, Task_id, Task_app_Acronym, Task_state, Task_creator, Task_owner) VALUES (?,?,?,?,?,?,?,?)", 
       [
         Task_name, 
@@ -105,7 +107,7 @@ exports.CreateTask = async (req, res) => {
     )
 
     // Increment app Running number after successful creation
-    result = await connection.promise().execute(
+    await connection.promise().execute(
       "UPDATE application SET `App_Rnumber` = ? WHERE `App_Acronym` = ?", 
       [app.App_Rnumber + 1, Task_app_Acronym]
     )
@@ -155,7 +157,7 @@ exports.GetTaskbyState = async (req, res) => {
       return;
     }
 
-    // Get user details
+    // Get user details from DB
     const getUser = await connection.promise().query(
       "SELECT * FROM user WHERE username = ?", 
       [username]
@@ -178,14 +180,14 @@ exports.GetTaskbyState = async (req, res) => {
       return;
     }
 
-    // Get app details
+    // Get app details from DB
     let getApp = await connection.promise().query(
       "SELECT * FROM application WHERE app_acronym = ?", 
       [Task_app_Acronym]
     )
     const app = getApp[0][0];
 
-    // AM001: Check if application exist in DB
+    // AM001: Check for valid application
     if (!app) {
       res.json({
         code: "AM001"
@@ -207,11 +209,11 @@ exports.GetTaskbyState = async (req, res) => {
     }
 
     // Get tasks details
-    const getTasks = await connection.promise().query(
+    const result = await connection.promise().query(
       "SELECT * FROM task WHERE Task_state = ? AND Task_app_acronym = ?", 
       [Task_state, Task_app_Acronym]
     )
-    const tasks = getTasks[0];
+    const tasks = result[0];
     
     // S001: Return tasks
     res.json({
