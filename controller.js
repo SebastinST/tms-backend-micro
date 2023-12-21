@@ -119,7 +119,7 @@ exports.CreateTask = async (req, res) => {
     return;
 
   } catch(e) {
-    // S003: Check for any transaction error
+    // T003: Check for any transaction error
     res.json({
       code: "T003"
     });
@@ -223,7 +223,7 @@ exports.GetTaskbyState = async (req, res) => {
     return;
 
   } catch(e) {
-    // S003: Check for any transaction error
+    // T003: Check for any transaction error
     res.json({
       code: "T003"
     });
@@ -362,7 +362,7 @@ exports.PromoteTask2Done = async (req, res) => {
     return;
 
   } catch(e) {
-    // S003: Check for any transaction error
+    // T003: Check for any transaction error
     res.json({
       code: "T003"
     });
