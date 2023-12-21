@@ -1,4 +1,4 @@
-const { validateUser, Checkgroup } = require("./middleware.js");
+const { Checkgroup } = require("./middleware.js");
 const connection = require("./config/database");
 const bcrypt = require("bcryptjs");
 
