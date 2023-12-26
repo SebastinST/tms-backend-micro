@@ -6,6 +6,8 @@ exports.CreateTask = async (req, res) => {
   try {
     const { username, password, Task_name, Task_app_Acronym } = req.body;
     let { Task_description } = req.body;
+    
+    console.log(null === undefined);
 
     // PS001: Check for mandatory fields in request body
     if (username === undefined
@@ -91,6 +93,13 @@ exports.CreateTask = async (req, res) => {
     \n******************************************************************************************************************************************************************************
     \n
     `
+    
+    // T003: Check for valid non-empty task name
+    if (Task_name === "") {
+      res.json({
+        code: "T003"
+      });
+    }
 
     // Create task in DB
     await connection.promise().execute(
