@@ -25,9 +25,10 @@ exports.CreateTask = async (req, res) => {
       || typeof Task_name !== "string" 
       || typeof Task_app_Acronym !== "string"
     ) {
-      return res.json({
+      res.json({
         code: "PS002"
-      })
+      });
+      return;
     }
     
     // Get user details from DB
@@ -256,9 +257,10 @@ exports.PromoteTask2Done = async (req, res) => {
       || typeof Task_id !== "string" 
       || typeof Task_app_Acronym !== "string"
     ) {
-      return res.json({
+      res.json({
         code: "PS002"
-      })
+      });
+      return;
     }
     
     // Get user details from DB
