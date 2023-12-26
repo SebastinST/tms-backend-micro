@@ -1,4 +1,4 @@
-const { Checkgroup } = require("./middleware.js");
+const { Checkgroup, sendEmailToProjectLead } = require("./middleware.js");
 const connection = require("./config/database");
 const bcrypt = require("bcryptjs");
 
@@ -364,6 +364,9 @@ exports.PromoteTask2Done = async (req, res) => {
       });
       return;
     }
+
+    // Send email alert on successful promotion
+    sendEmailToProjectLead(task, user, app);
 
     // S001: Return successful update
     res.json({
